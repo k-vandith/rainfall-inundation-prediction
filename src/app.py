@@ -32,11 +32,11 @@ def main() -> None:
     st.markdown(f'<div class="panel"><div class="kicker">Current risk</div><p class="title">{alert}</p><p class="muted">Latest hour {latest:.1f} mm · flood fraction {flood["flood_fraction"]:.0%} · model {model.get("backend")}</p></div>', unsafe_allow_html=True)
     fig = go.Figure(go.Scatter(x=df["date"], y=df["precipitation_mm"], name="Rain", line=dict(color="#4aa3df")))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e7ecf3", height=300, title="Precipitation")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     depth = flood["depth_grid"]
     heat = px.imshow(depth, color_continuous_scale="Blues", origin="lower", title="Bathtub inundation depth (m)")
     heat.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#e7ecf3", height=420)
-    st.plotly_chart(heat, use_container_width=True)
+    st.plotly_chart(heat, width="stretch")
 
 if __name__ == "__main__":
     main()
