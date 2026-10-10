@@ -136,7 +136,7 @@ def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
         raise ValueError("Rainfall values cannot be negative")
 
     if time_column is not None:
-        dates = pd.to_datetime(frame[time_column], errors="coerce")
+        dates = pd.to_datetime(frame[time_column], errors="coerce", format="mixed")
         if dates.isna().any():
             raise ValueError("Timestamp values must all be valid dates or times")
         if dates.duplicated().any():
