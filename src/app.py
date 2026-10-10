@@ -126,7 +126,7 @@ def main() -> None:
             st.info("Upload a CSV to analyse your observations. The charts below are only a preview until a file is selected.")
         else:
             try:
-                df = load_rainfall_csv(uploaded.getvalue())
+                df = load_rainfall_csv(uploaded.getvalue()).tail(window_hours).reset_index(drop=True)
                 source_label = "uploaded CSV"
             except (ValueError, TypeError, UnicodeDecodeError, pd.errors.ParserError) as exc:
                 st.error(f"Could not read this CSV: {exc}")
