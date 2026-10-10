@@ -51,7 +51,7 @@ def test_csv_upload_normalizes_columns_and_sorts_time() -> None:
 @pytest.mark.parametrize(
     ("csv", "message"),
     [
-        ("date,temperature\n2025-01-01,20\n" * 5, "rainfall column"),
+        ("date,temperature\n2025-01-01,20\n2025-01-02,22\n2025-01-03,18\n2025-01-04,23\n2025-01-05,19\n", "rainfall column"),
         ("precipitation_mm\n1\n2\n-3\n4\n5\n", "cannot be negative"),
         ("precipitation_mm\n1\n2\n", "at least 5"),
         ("date,precipitation_mm\nnot-a-date,1\n2025-01-02,2\n2025-01-03,3\n2025-01-04,4\n2025-01-05,5\n", "valid dates"),
