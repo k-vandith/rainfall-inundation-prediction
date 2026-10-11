@@ -97,19 +97,17 @@ def main() -> None:
             latitude = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=17.3850, step=0.01, format="%.4f")
         with right:
             longitude = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=78.4867, step=0.01, format="%.4f")
-        with st.spinner("Loading hourly forecast or offline fallback…"):
-            df = fetch_open_meteo(
-                lat=float(latitude),
-                lon=float(longitude),
-                days=max(1, min(16, math.ceil(window_hours / 24))),
-            ).tail(window_hours).reset_index(drop=True)
-        source_label = str(df["source"].iloc[0])
-        if source_label == "synthetic-fallback":
-            st.error(
-                "The live forecast is unavailable. Generated fallback values are not shown as a forecast. "
-                "Retry the request or explicitly choose Synthetic demo."
-            )
+        try:
+            with st.spinner("Loading the live Open-Meteo forecast…"):
+                df = fetch_open_meteo(
+                    lat=float(latitude),
+                    lon=float(longitude),
+                    days=max(1, min(16, math.ceil(window_hours / 24))),
+                ).tail(window_hours).reset_index(drop=True)
+        except RuntimeError as exc:
+            st.error(str(exc))
             st.stop()
+        source_label = str(df["source"].iloc[0])
     elif source_mode == "CSV upload":
         uploaded = st.file_uploader(
             "Upload rainfall CSV",
