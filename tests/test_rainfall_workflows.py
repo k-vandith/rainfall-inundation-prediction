@@ -99,14 +99,13 @@ def test_open_meteo_returns_hourly_observations(monkeypatch: pytest.MonkeyPatch)
     assert frame["source"].eq("open-meteo").all()
 
 
-def test_open_meteo_failure_is_visible_as_synthetic_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_open_meteo_failure_does_not_return_generated_observations(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(url: str, timeout: float) -> None:
         raise OSError("offline")
 
     monkeypatch.setattr(urllib.request, "urlopen", fail)
-    frame = fetch_open_meteo(days=1)
-    assert len(frame) == 24
-    assert frame["source"].eq("synthetic-fallback").all()
+    with pytest.raises(RuntimeError, match="select Synthetic demo explicitly"):
+        fetch_open_meteo(days=1)
 
 
 @pytest.mark.parametrize(

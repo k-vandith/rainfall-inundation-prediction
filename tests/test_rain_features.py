@@ -26,3 +26,15 @@ def test_model_and_inundation_smoke() -> None:
 def test_inundation_rejects_bad_grids() -> None:
     with pytest.raises(ValueError):
         bathtub_inundation(np.array([1, 2, 3]), 2.0)
+
+
+
+def test_synthetic_rain_does_not_claim_operational_holdout_accuracy() -> None:
+    frame = synthetic_rainfall(hours=120, seed=42)
+    model = train_heavy_rain_model(frame)
+
+    assert model["backend"] == "rules"
+    assert model["model"] is None
+    assert model["accuracy"] is None
+    assert model["evaluation_scope"] == "demo_or_forecast_input_not_observed_ground_truth"
+    assert model["operationally_validated"] is False

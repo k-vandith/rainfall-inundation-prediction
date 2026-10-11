@@ -75,7 +75,7 @@ def main() -> None:
         st.markdown("### Scenario controls")
         source_mode = st.radio(
             "Rainfall source",
-            ["Synthetic demo", "Open-Meteo forecast", "CSV upload"],
+            ["CSV upload", "Open-Meteo forecast", "Synthetic demo"],
             help="Synthetic data works offline. Open-Meteo requires internet. CSV upload expects hourly observations.",
         )
         window_hours = st.slider("Window / horizon (hours)", min_value=48, max_value=240, value=120, step=24)
@@ -97,15 +97,17 @@ def main() -> None:
             latitude = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=17.3850, step=0.01, format="%.4f")
         with right:
             longitude = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=78.4867, step=0.01, format="%.4f")
-        with st.spinner("Loading hourly forecast or offline fallback…"):
-            df = fetch_open_meteo(
-                lat=float(latitude),
-                lon=float(longitude),
-                days=max(1, min(16, math.ceil(window_hours / 24))),
-            ).tail(window_hours).reset_index(drop=True)
+        try:
+            with st.spinner("Loading the live Open-Meteo forecast…"):
+                df = fetch_open_meteo(
+                    lat=float(latitude),
+                    lon=float(longitude),
+                    days=max(1, min(16, math.ceil(window_hours / 24))),
+                ).tail(window_hours).reset_index(drop=True)
+        except RuntimeError as exc:
+            st.error(str(exc))
+            st.stop()
         source_label = str(df["source"].iloc[0])
-        if source_label == "synthetic-fallback":
-            st.warning("Open-Meteo could not be reached. This view is using synthetic fallback data, not a live forecast.")
     elif source_mode == "CSV upload":
         uploaded = st.file_uploader(
             "Upload rainfall CSV",
@@ -120,10 +122,8 @@ def main() -> None:
             use_container_width=True,
         )
         if uploaded is None:
-            preview_only = True
-            source_label = "synthetic preview — waiting for CSV"
-            df = _rain(window_hours)
-            st.info("Upload a CSV to analyse your observations. The charts below are only a preview until a file is selected.")
+            st.info("Upload a CSV to analyse observed rainfall. No synthetic prediction is shown until you choose Synthetic demo explicitly.")
+            st.stop()
         else:
             try:
                 df = load_rainfall_csv(uploaded.getvalue()).tail(window_hours).reset_index(drop=True)
@@ -145,29 +145,24 @@ def main() -> None:
         rolling_24h = float(rain.tail(24).sum())
         dem = np.linspace(0, 6, 40)[:, None] + np.linspace(0, 2, 40)[None, :]
         flood = bathtub_inundation(dem, float(water_level))
-        alert = alert_level(latest, flood["flood_fraction"])
+        scenario_band = alert_level(latest, flood["flood_fraction"])
         model = train_heavy_rain_model(df, threshold_mm=float(threshold))
         signal = next_hour_heavy_rain_signal(df, model)
     except (ValueError, TypeError, KeyError) as exc:
         st.error(f"Unable to build this scenario: {exc}")
         st.stop()
 
-    alert_colors = {
-        "normal": "#34d399",
-        "watch": "#fbbf24",
-        "warning": "#fb923c",
-        "severe": "#fb7185",
-    }
-    alert_color = alert_colors[alert]
+    scenario_color = "#fbbf24"
     st.markdown(
         f"""
         <div class="panel risk-panel">
           <div>
-            <div class="kicker">Scenario status</div>
-            <p class="risk-title" style="color:{alert_color}">{alert.upper()}</p>
-            <p class="muted">Current indicator · latest observation {latest:.1f} mm/hour · source: {source_label}</p>
+            <div class="kicker">Non-operational scenario</div>
+            <p class="risk-title" style="color:{scenario_color}">SCENARIO ONLY</p>
+            <p class="muted">Illustrative band: {scenario_band.upper()} · latest rainfall {latest:.1f} mm/hour · source: {source_label}</p>
+            <p class="muted">The band uses a synthetic elevation grid and is not a local flood-risk classification or official warning.</p>
           </div>
-          <div class="risk-mark" style="border-color:{alert_color};color:{alert_color}">●</div>
+          <div class="risk-mark" style="border-color:{scenario_color};color:{scenario_color}">●</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -177,7 +172,7 @@ def main() -> None:
     c1.metric("Latest rainfall", f"{latest:.1f} mm", help="Last available observation; it may be forecast or uploaded data.")
     c2.metric("Peak in series", f"{peak:.1f} mm/h")
     c3.metric("Rain in last 24 rows", f"{rolling_24h:.1f} mm")
-    c4.metric("Grid below water level", f"{flood['flood_fraction']:.0%}")
+    c4.metric("Synthetic grid below water level", f"{flood['flood_fraction']:.0%}", help="Illustrative elevation grid only; not measured local terrain or a flood extent prediction.")
 
     if model.get("backend") == "scikit-learn" and model.get("accuracy") is not None:
         st.caption(
@@ -254,7 +249,8 @@ def main() -> None:
         "latest_precipitation_mm": round(latest, 3),
         "peak_precipitation_mm": round(peak, 3),
         "last_24_rows_total_mm": round(rolling_24h, 3),
-        "scenario_alert": alert,
+        "scenario_alert": "SCENARIO ONLY — not a local flood-risk classification or official warning",
+        "illustrative_scenario_band": scenario_band,
         "water_level_m": float(water_level),
         "bathtub_flood_fraction": round(float(flood["flood_fraction"]), 4),
         "bathtub_max_depth_m": round(float(flood["max_depth_m"]), 3),
