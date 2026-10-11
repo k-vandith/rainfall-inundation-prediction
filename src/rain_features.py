@@ -91,9 +91,7 @@ def fetch_open_meteo(
             "source": "open-meteo",
         })
     except Exception:
-        fallback = synthetic_rainfall(hours=int(days) * 24)
-        fallback["source"] = "synthetic-fallback"
-        return fallback
+        raise RuntimeError("Live rainfall forecast is unavailable; select Synthetic demo explicitly if needed.") from None
 
 
 def _validate_hourly_timestamps(dates: pd.Series) -> None:
