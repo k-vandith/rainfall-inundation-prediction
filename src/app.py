@@ -145,7 +145,7 @@ def main() -> None:
         rolling_24h = float(rain.tail(24).sum())
         dem = np.linspace(0, 6, 40)[:, None] + np.linspace(0, 2, 40)[None, :]
         flood = bathtub_inundation(dem, float(water_level))
-        alert = alert_level(latest, flood["flood_fraction"])
+        scenario_band = alert_level(latest, flood["flood_fraction"])
         model = train_heavy_rain_model(df, threshold_mm=float(threshold))
         signal = next_hour_heavy_rain_signal(df, model)
     except (ValueError, TypeError, KeyError) as exc:
@@ -158,16 +158,17 @@ def main() -> None:
         "warning": "#fb923c",
         "severe": "#fb7185",
     }
-    alert_color = alert_colors[alert]
+    scenario_color = "#fbbf24"
     st.markdown(
         f"""
         <div class="panel risk-panel">
           <div>
-            <div class="kicker">Scenario status</div>
-            <p class="risk-title" style="color:{alert_color}">{alert.upper()}</p>
-            <p class="muted">Current indicator · latest observation {latest:.1f} mm/hour · source: {source_label}</p>
+            <div class="kicker">Non-operational scenario</div>
+            <p class="risk-title" style="color:{scenario_color}">SCENARIO ONLY</p>
+            <p class="muted">Illustrative band: {scenario_band.upper()} · latest rainfall {latest:.1f} mm/hour · source: {source_label}</p>
+            <p class="muted">The band uses a synthetic elevation grid and is not a local flood-risk classification or official warning.</p>
           </div>
-          <div class="risk-mark" style="border-color:{alert_color};color:{alert_color}">●</div>
+          <div class="risk-mark" style="border-color:{scenario_color};color:{scenario_color}">●</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -177,7 +178,7 @@ def main() -> None:
     c1.metric("Latest rainfall", f"{latest:.1f} mm", help="Last available observation; it may be forecast or uploaded data.")
     c2.metric("Peak in series", f"{peak:.1f} mm/h")
     c3.metric("Rain in last 24 rows", f"{rolling_24h:.1f} mm")
-    c4.metric("Grid below water level", f"{flood['flood_fraction']:.0%}")
+    c4.metric("Synthetic grid below water level", f"{flood['flood_fraction']:.0%}", help="Illustrative elevation grid only; not measured local terrain or a flood extent prediction.")
 
     if model.get("backend") == "scikit-learn" and model.get("accuracy") is not None:
         st.caption(
