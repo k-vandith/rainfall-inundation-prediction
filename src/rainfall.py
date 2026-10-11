@@ -32,11 +32,29 @@ def _rain_column(df: pd.DataFrame) -> pd.Series:
     return rain
 
 
+def _ordered_rain_column(df: pd.DataFrame) -> pd.Series:
+    """Validate rainfall and order observations chronologically when a time column exists."""
+    rain = _rain_column(df)
+    time_columns = {"date", "datetime", "timestamp", "time", "valid_time"}
+    normalized = {
+        column: str(column).strip().casefold().replace(" ", "_").replace("-", "_")
+        for column in df.columns
+    }
+    time_column = next((column for column, name in normalized.items() if name in time_columns), None)
+    if time_column is not None:
+        dates = pd.to_datetime(df[time_column], errors="coerce", format="mixed", utc=True)
+        if dates.isna().any():
+            raise ValueError("rainfall timestamps must all be valid dates or times")
+        order = np.argsort(dates.to_numpy(), kind="stable")
+        rain = rain.iloc[order]
+    return rain.reset_index(drop=True)
+
+
 def predict_next(df: pd.DataFrame, window: int = 7) -> float:
     """Return the mean of the most recent window as a transparent baseline."""
     if isinstance(window, bool) or not isinstance(window, (int, np.integer)) or window < 1:
         raise ValueError("window must be a positive integer")
-    rain = _rain_column(df)
+    rain = _ordered_rain_column(df)
     return float(rain.tail(int(window)).mean())
 
 
@@ -77,7 +95,7 @@ def run_pipeline(
         raise FileNotFoundError(f"Rainfall CSV not found: {path}")
     frame = pd.read_csv(path)
     rain = _rain_column(frame)
-    estimate = predict_next(pd.DataFrame({"rainfall_mm": rain}), window=window)
+    estimate = predict_next(frame, window=window)
     result = flood_risk(estimate, threshold=threshold)
     return {
         "observations": int(len(rain)),
