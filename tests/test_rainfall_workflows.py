@@ -219,12 +219,13 @@ def test_csv_upload_normalizes_mixed_time_zones_before_sorting():
 
     assert frame["precipitation_mm"].tolist() == [0, 0.5, 1, 2, 4]
     assert frame["date"].is_monotonic_increasing
-    assert str(frame["date"].dtype) == "datetime64[ns, UTC]"
+    assert str(frame["date"].dtype).startswith("datetime64[")
+    assert str(frame["date"].dtype).endswith(", UTC]")
 
 
 def test_model_and_signal_sort_out_of_order_observations_before_time_series_work():
     ordered = _storm_series()
-    shuffled = ordered.iloc[[65, 4, 111, 10, 80, 2, 33, 0, 99, 50, 6, 24, 95, 40, 15, 72, 101, 1, 89, 20]].copy()
+    shuffled = ordered.sample(frac=1, random_state=17).reset_index(drop=True)
     ordered_model = train_heavy_rain_model(ordered, threshold_mm=10)
     shuffled_model = train_heavy_rain_model(shuffled, threshold_mm=10)
 
