@@ -75,7 +75,7 @@ def main() -> None:
         st.markdown("### Scenario controls")
         source_mode = st.radio(
             "Rainfall source",
-            ["Open-Meteo forecast", "CSV upload", "Synthetic demo"],
+            ["CSV upload", "Open-Meteo forecast", "Synthetic demo"],
             help="Synthetic data works offline. Open-Meteo requires internet. CSV upload expects hourly observations.",
         )
         window_hours = st.slider("Window / horizon (hours)", min_value=48, max_value=240, value=120, step=24)
@@ -120,10 +120,8 @@ def main() -> None:
             use_container_width=True,
         )
         if uploaded is None:
-            preview_only = True
-            source_label = "synthetic preview — waiting for CSV"
-            df = _rain(window_hours)
-            st.info("Upload a CSV to analyse your observations. The charts below are only a preview until a file is selected.")
+            st.info("Upload a CSV to analyse observed rainfall. No synthetic prediction is shown until you choose Synthetic demo explicitly.")
+            st.stop()
         else:
             try:
                 df = load_rainfall_csv(uploaded.getvalue()).tail(window_hours).reset_index(drop=True)
