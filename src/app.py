@@ -57,13 +57,17 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
     st.markdown(theme_css("#2dd4bf", danger="#fb7185", ok="#34d399", warn="#fbbf24"), unsafe_allow_html=True)
+    logo_svg = (ROOT / "assets" / "rainfall-inundation-logo.svg").read_text(encoding="utf-8")
     st.markdown(
-        """
+        f"""
         <div class="top">
-          <div>
-            <div class="kicker">Hydrometeorology · Field console 01</div>
-            <p class="title">Rainfall / inundation monitor</p>
-            <p class="muted">Explore hourly rainfall signals and a simplified elevation-grid scenario.</p>
+          <div style="display:flex;align-items:center;gap:16px;">
+            <div style="width:76px;height:76px;flex:0 0 76px;">{logo_svg}</div>
+            <div>
+              <div class="kicker">Hydrometeorology · Field console 01</div>
+              <p class="title">Rainfall / inundation monitor</p>
+              <p class="muted">Explore hourly rainfall signals and a simplified elevation-grid scenario.</p>
+            </div>
           </div>
           <div class="pill">LOCAL WORKSPACE · RESEARCH USE</div>
         </div>
