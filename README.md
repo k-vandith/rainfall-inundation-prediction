@@ -1,5 +1,9 @@
 # Rainfall & Inundation Prediction
 
+<p align="center">
+  <img src="assets/rainfall-inundation-logo.svg" alt="Rainfall and inundation prediction logo" width="160" />
+</p>
+
 A local Streamlit workspace for exploring hourly rainfall series, a next-step heavy-rain signal, and a simplified inundation-grid scenario.
 
 ## Run locally
