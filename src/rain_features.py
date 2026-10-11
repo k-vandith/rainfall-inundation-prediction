@@ -239,6 +239,25 @@ def train_heavy_rain_model(df: pd.DataFrame, threshold_mm: float = 10.0) -> dict
     if not math.isfinite(threshold) or threshold <= 0:
         raise ValueError("threshold_mm must be a positive finite number")
     rain = _ordered_rain_series(df)
+    # Do not report holdout "accuracy" when the target series is synthetic or is
+    # itself a forecast product: neither supplies observed ground-truth outcomes.
+    sources = set()
+    if "source" in df.columns:
+        sources = {
+            str(value).strip().casefold()
+            for value in df["source"].dropna().unique()
+            if str(value).strip()
+        }
+    non_observation_sources = {"synthetic", "synthetic-fallback", "open-meteo"}
+    if sources and sources.issubset(non_observation_sources):
+        return {
+            "backend": "rules",
+            "model": None,
+            "accuracy": None,
+            "threshold_mm": threshold,
+            "evaluation_scope": "demo_or_forecast_input_not_observed_ground_truth",
+            "operationally_validated": False,
+        }
     if len(rain) < 8:
         return {"backend": "rules", "model": None, "accuracy": None, "threshold_mm": threshold}
 
@@ -267,6 +286,8 @@ def train_heavy_rain_model(df: pd.DataFrame, threshold_mm: float = 10.0) -> dict
             "accuracy": holdout_accuracy,
             "threshold_mm": threshold,
             "feature_columns": list(features.columns),
+            "evaluation_scope": "chronological_holdout_on_uploaded_observations",
+            "operationally_validated": False,
         }
     except ImportError:
         return {"backend": "rules", "model": None, "accuracy": None, "threshold_mm": threshold}
