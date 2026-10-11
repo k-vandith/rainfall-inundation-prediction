@@ -190,6 +190,32 @@ def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
         "source": "uploaded-csv",
     })
 
+def _ordered_rain_series(df: pd.DataFrame) -> pd.Series:
+    """Validate rainfall values and, when present, order them by timestamp."""
+    if "precipitation_mm" not in df.columns:
+        raise ValueError("df must include precipitation_mm")
+    rain = pd.to_numeric(df["precipitation_mm"], errors="coerce").astype(float)
+    if rain.empty:
+        raise ValueError("df must contain at least one rainfall observation")
+    if rain.isna().any() or not np.isfinite(rain.to_numpy()).all() or (rain < 0).any():
+        raise ValueError("Rainfall observations must be finite and non-negative")
+
+    normalized = {
+        column: re.sub(r"[^a-z0-9]+", "_", str(column).strip().casefold()).strip("_")
+        for column in df.columns
+    }
+    time_column = next((column for column, name in normalized.items() if name in TIME_COLUMNS), None)
+    if time_column is not None:
+        dates = pd.to_datetime(df[time_column], errors="coerce", format="mixed", utc=True)
+        if dates.isna().any():
+            raise ValueError("Timestamp values must all be valid dates or times")
+        if dates.duplicated().any():
+            raise ValueError("Rainfall timestamps must be unique")
+        order = np.argsort(dates.to_numpy(), kind="stable")
+        rain = rain.iloc[order]
+    return rain.reset_index(drop=True)
+
+
 def train_heavy_rain_model(df: pd.DataFrame, threshold_mm: float = 10.0) -> dict[str, Any]:
     """Train a next-observation classifier and report chronological holdout accuracy.
 
@@ -200,11 +226,8 @@ def train_heavy_rain_model(df: pd.DataFrame, threshold_mm: float = 10.0) -> dict
     threshold = float(threshold_mm)
     if not math.isfinite(threshold) or threshold <= 0:
         raise ValueError("threshold_mm must be a positive finite number")
-    if "precipitation_mm" not in df:
-        raise ValueError("df must include precipitation_mm")
-
-    rain = pd.to_numeric(df["precipitation_mm"], errors="coerce").astype(float)
-    if len(rain) < 8 or rain.isna().any() or not np.isfinite(rain.to_numpy()).all() or (rain < 0).any():
+    rain = _ordered_rain_series(df)
+    if len(rain) < 8:
         return {"backend": "rules", "model": None, "accuracy": None, "threshold_mm": threshold}
 
     features = pd.DataFrame({
@@ -239,9 +262,7 @@ def train_heavy_rain_model(df: pd.DataFrame, threshold_mm: float = 10.0) -> dict
 
 def next_hour_heavy_rain_signal(df: pd.DataFrame, model_result: dict[str, Any]) -> dict[str, Any]:
     """Return either a classifier score or a clearly labelled, uncalibrated rule index."""
-    rain = pd.to_numeric(df.get("precipitation_mm", pd.Series(dtype=float)), errors="coerce")
-    if rain.empty or rain.isna().any() or not np.isfinite(rain.to_numpy(dtype=float)).all() or (rain < 0).any():
-        raise ValueError("df must contain valid non-negative precipitation_mm values")
+    rain = _ordered_rain_series(df)
     threshold = float(model_result.get("threshold_mm", 10.0))
     if not math.isfinite(threshold) or threshold <= 0:
         raise ValueError("model_result threshold_mm must be positive")
