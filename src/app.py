@@ -75,7 +75,7 @@ def main() -> None:
         st.markdown("### Scenario controls")
         source_mode = st.radio(
             "Rainfall source",
-            ["Synthetic demo", "Open-Meteo forecast", "CSV upload"],
+            ["Open-Meteo forecast", "CSV upload", "Synthetic demo"],
             help="Synthetic data works offline. Open-Meteo requires internet. CSV upload expects hourly observations.",
         )
         window_hours = st.slider("Window / horizon (hours)", min_value=48, max_value=240, value=120, step=24)
