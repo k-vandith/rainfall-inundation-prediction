@@ -14,7 +14,7 @@ streamlit run src/app.py
 
 - **Synthetic demo:** deterministic hourly data; works offline.
 - **Open-Meteo:** hourly precipitation forecast by latitude/longitude. If unavailable, the UI labels its synthetic fallback.
-- **CSV upload:** use `precipitation_mm` or `rainfall_mm`; a `date`, `datetime`, `timestamp`, or `time` column is optional. Uploads are limited to 5 MB / 100,000 rows and require at least five valid non-negative observations. Use the downloadable template.
+- **CSV upload:** use `precipitation_mm` or `rainfall_mm`; a `date`, `datetime`, `timestamp`, or `time` column is optional. Uploads are limited to 5 MB / 100,000 rows and require at least five valid non-negative observations. When timestamps are supplied, they must be unique and exactly one hour apart so the next-step signal remains hourly. Use the downloadable template.
 
 The dashboard exports cleaned observations as CSV and scenario details as JSON.
 

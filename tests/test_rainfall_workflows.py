@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import urllib.request
 
@@ -87,6 +88,7 @@ def test_open_meteo_returns_hourly_observations(monkeypatch: pytest.MonkeyPatch)
 
     def fake_urlopen(url: str, timeout: float) -> Response:
         assert "hourly=precipitation" in url
+        assert "timezone=UTC" in url
         assert timeout > 0
         return Response()
 
@@ -177,3 +179,90 @@ def test_alert_bands(rain: float, fraction: float, expected: str) -> None:
 def test_alert_rejects_invalid_values(rain: float, fraction: float) -> None:
     with pytest.raises(ValueError):
         alert_level(rain, fraction)
+
+
+
+def test_file_like_csv_upload_obeys_byte_limit_and_restores_cursor():
+    upload = io.BytesIO(b"x" * (5 * 1024 * 1024 + 1))
+
+    with pytest.raises(ValueError, match="5 MB"):
+        load_rainfall_csv(upload)
+
+    assert upload.tell() == 0
+
+
+def test_csv_upload_handles_empty_input_with_clear_error():
+    with pytest.raises(ValueError, match="no observations"):
+        load_rainfall_csv(b"")
+
+    with pytest.raises(ValueError, match="no observations"):
+        load_rainfall_csv("  \n\t")
+
+
+def test_csv_upload_enforces_row_cap_before_loading_entire_file():
+    raw = ("precipitation_mm\n" + "1\n" * 100001).encode("ascii")
+
+    with pytest.raises(ValueError, match="100000 rows"):
+        load_rainfall_csv(raw)
+
+
+def test_csv_upload_normalizes_mixed_time_zones_before_sorting():
+    csv = (
+        "timestamp,precipitation_mm\n"
+        "2025-01-01T04:00:00+00:00,4\n"
+        "2024-12-31T19:00:00-05:00,0\n"
+        "2025-01-01T03:00:00Z,3\n"
+        "2025-01-01T02:00:00+00:00,2\n"
+        "2025-01-01T01:00:00Z,1\n"
+    )
+
+    frame = load_rainfall_csv(csv)
+
+    assert frame["precipitation_mm"].tolist() == [0, 1, 2, 3, 4]
+    assert frame["date"].diff().dropna().eq(pd.Timedelta(hours=1)).all()
+    assert frame["date"].is_monotonic_increasing
+    assert str(frame["date"].dtype).startswith("datetime64[")
+    assert str(frame["date"].dtype).endswith(", UTC]")
+
+
+def test_model_and_signal_sort_out_of_order_observations_before_time_series_work():
+    ordered = _storm_series()
+    shuffled = ordered.sample(frac=1, random_state=17).reset_index(drop=True)
+    ordered_model = train_heavy_rain_model(ordered, threshold_mm=10)
+    shuffled_model = train_heavy_rain_model(shuffled, threshold_mm=10)
+
+    assert ordered_model["backend"] == shuffled_model["backend"] == "scikit-learn"
+    assert ordered_model["accuracy"] == pytest.approx(shuffled_model["accuracy"])
+    ordered_signal = next_hour_heavy_rain_signal(ordered, ordered_model)
+    shuffled_signal = next_hour_heavy_rain_signal(shuffled, shuffled_model)
+    assert ordered_signal["score"] == pytest.approx(shuffled_signal["score"])
+
+
+def test_training_rejects_invalid_rainfall_instead_of_silently_using_rules():
+    frame = synthetic_rainfall(hours=20)
+    frame.loc[3, "precipitation_mm"] = -1
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        train_heavy_rain_model(frame)
+
+
+
+def test_csv_upload_rejects_gaps_in_hourly_timestamps():
+    csv = (
+        "timestamp,precipitation_mm\n"
+        "2025-01-01 00:00,0\n"
+        "2025-01-01 01:00,1\n"
+        "2025-01-01 03:00,3\n"
+        "2025-01-01 04:00,4\n"
+        "2025-01-01 05:00,5\n"
+    )
+
+    with pytest.raises(ValueError, match="exactly one hour apart"):
+        load_rainfall_csv(csv)
+
+
+def test_training_rejects_gaps_in_hourly_timestamps():
+    frame = _storm_series().drop(index=10).reset_index(drop=True)
+
+    with pytest.raises(ValueError, match="exactly one hour apart"):
+        train_heavy_rain_model(frame)
