@@ -88,6 +88,7 @@ def test_open_meteo_returns_hourly_observations(monkeypatch: pytest.MonkeyPatch)
 
     def fake_urlopen(url: str, timeout: float) -> Response:
         assert "hourly=precipitation" in url
+        assert "timezone=UTC" in url
         assert timeout > 0
         return Response()
 
@@ -209,15 +210,16 @@ def test_csv_upload_normalizes_mixed_time_zones_before_sorting():
     csv = (
         "timestamp,precipitation_mm\n"
         "2025-01-01T04:00:00+00:00,4\n"
-        "2024-12-31T19:30:00-05:00,0.5\n"
-        "2025-01-01T00:00:00Z,0\n"
+        "2024-12-31T19:00:00-05:00,0\n"
+        "2025-01-01T03:00:00Z,3\n"
         "2025-01-01T02:00:00+00:00,2\n"
         "2025-01-01T01:00:00Z,1\n"
     )
 
     frame = load_rainfall_csv(csv)
 
-    assert frame["precipitation_mm"].tolist() == [0, 0.5, 1, 2, 4]
+    assert frame["precipitation_mm"].tolist() == [0, 1, 2, 3, 4]
+    assert frame["date"].diff().dropna().eq(pd.Timedelta(hours=1)).all()
     assert frame["date"].is_monotonic_increasing
     assert str(frame["date"].dtype).startswith("datetime64[")
     assert str(frame["date"].dtype).endswith(", UTC]")
@@ -241,4 +243,26 @@ def test_training_rejects_invalid_rainfall_instead_of_silently_using_rules():
     frame.loc[3, "precipitation_mm"] = -1
 
     with pytest.raises(ValueError, match="finite and non-negative"):
+        train_heavy_rain_model(frame)
+
+
+
+def test_csv_upload_rejects_gaps_in_hourly_timestamps():
+    csv = (
+        "timestamp,precipitation_mm\n"
+        "2025-01-01 00:00,0\n"
+        "2025-01-01 01:00,1\n"
+        "2025-01-01 03:00,3\n"
+        "2025-01-01 04:00,4\n"
+        "2025-01-01 05:00,5\n"
+    )
+
+    with pytest.raises(ValueError, match="exactly one hour apart"):
+        load_rainfall_csv(csv)
+
+
+def test_training_rejects_gaps_in_hourly_timestamps():
+    frame = _storm_series().drop(index=10).reset_index(drop=True)
+
+    with pytest.raises(ValueError, match="exactly one hour apart"):
         train_heavy_rain_model(frame)

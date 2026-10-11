@@ -68,7 +68,7 @@ def fetch_open_meteo(
         "longitude": float(lon),
         "hourly": "precipitation",
         "forecast_days": int(days),
-        "timezone": "auto",
+        "timezone": "UTC",
     })
     url = f"https://api.open-meteo.com/v1/forecast?{params}"
     try:
@@ -80,7 +80,7 @@ def fetch_open_meteo(
         if not times or len(times) != len(values):
             raise ValueError("Open-Meteo returned an incomplete hourly series")
         rain = pd.to_numeric(pd.Series(values), errors="coerce")
-        dates = pd.to_datetime(pd.Series(times), errors="coerce")
+        dates = pd.to_datetime(pd.Series(times), errors="coerce", utc=True)
         if rain.isna().any() or dates.isna().any() or not np.isfinite(rain.to_numpy(dtype=float)).all():
             raise ValueError("Open-Meteo returned invalid observations")
         if (rain < 0).any():
@@ -94,6 +94,15 @@ def fetch_open_meteo(
         fallback = synthetic_rainfall(hours=int(days) * 24)
         fallback["source"] = "synthetic-fallback"
         return fallback
+
+
+def _validate_hourly_timestamps(dates: pd.Series) -> None:
+    """Reject gaps or irregular intervals where the workflow assumes hourly data."""
+    if len(dates) < 2:
+        return
+    intervals = dates.diff().iloc[1:]
+    if not intervals.eq(pd.Timedelta(hours=1)).all():
+        raise ValueError("Timestamps must be exactly one hour apart with no gaps")
 
 
 def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
@@ -179,6 +188,7 @@ def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
         order = np.argsort(dates.to_numpy(), kind="stable")
         dates = dates.iloc[order].reset_index(drop=True)
         rain = rain.iloc[order].reset_index(drop=True)
+        _validate_hourly_timestamps(dates)
     else:
         dates = pd.Series(pd.date_range("2024-01-01", periods=len(frame), freq="h", tz="UTC"))
 
@@ -212,6 +222,8 @@ def _ordered_rain_series(df: pd.DataFrame) -> pd.Series:
         if dates.duplicated().any():
             raise ValueError("Rainfall timestamps must be unique")
         order = np.argsort(dates.to_numpy(), kind="stable")
+        ordered_dates = dates.iloc[order].reset_index(drop=True)
+        _validate_hourly_timestamps(ordered_dates)
         rain = rain.iloc[order]
     return rain.reset_index(drop=True)
 
