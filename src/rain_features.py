@@ -97,23 +97,58 @@ def fetch_open_meteo(
 
 
 def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
-    """Parse a CSV upload into date, precipitation_mm, and source columns.
+    """Parse CSV input within the byte/row limits into sorted, normalized observations."""
+    try:
+        if isinstance(upload, (bytes, bytearray)):
+            raw = bytes(upload)
+            if len(raw) > MAX_UPLOAD_BYTES:
+                raise ValueError("CSV must be 5 MB or smaller")
+            if not raw.strip():
+                raise ValueError("CSV contains no observations")
+            source = BytesIO(raw)
+        elif isinstance(upload, str):
+            if len(upload.encode("utf-8")) > MAX_UPLOAD_BYTES:
+                raise ValueError("CSV must be 5 MB or smaller")
+            if not upload.strip():
+                raise ValueError("CSV contains no observations")
+            source = StringIO(upload)
+        elif hasattr(upload, "read"):
+            tell = getattr(upload, "tell", None)
+            seek = getattr(upload, "seek", None)
+            position = None
+            if callable(tell) and callable(seek):
+                try:
+                    position = tell()
+                except (OSError, ValueError):
+                    position = None
+            try:
+                raw = upload.read(MAX_UPLOAD_BYTES + 1)
+            finally:
+                if position is not None:
+                    try:
+                        seek(position)
+                    except (OSError, ValueError):
+                        pass
+            if isinstance(raw, str):
+                if len(raw.encode("utf-8")) > MAX_UPLOAD_BYTES:
+                    raise ValueError("CSV must be 5 MB or smaller")
+                if not raw.strip():
+                    raise ValueError("CSV contains no observations")
+                source = StringIO(raw)
+            elif isinstance(raw, (bytes, bytearray)):
+                if len(raw) > MAX_UPLOAD_BYTES:
+                    raise ValueError("CSV must be 5 MB or smaller")
+                if not raw.strip():
+                    raise ValueError("CSV contains no observations")
+                source = BytesIO(bytes(raw))
+            else:
+                raise TypeError("file-like upload must return CSV bytes or text")
+        else:
+            raise TypeError("upload must be CSV bytes, text, or a file-like object")
 
-    Timestamp is optional. Accepted rainfall column names include precipitation_mm,
-    rainfall_mm, precipitation, rainfall, rain_mm, and precip_mm.
-    """
-    if isinstance(upload, (bytes, bytearray)):
-        if len(upload) > MAX_UPLOAD_BYTES:
-            raise ValueError("CSV must be 5 MB or smaller")
-        frame = pd.read_csv(BytesIO(upload))
-    elif isinstance(upload, str):
-        if len(upload.encode("utf-8")) > MAX_UPLOAD_BYTES:
-            raise ValueError("CSV must be 5 MB or smaller")
-        frame = pd.read_csv(StringIO(upload))
-    elif hasattr(upload, "read"):
-        frame = pd.read_csv(upload)
-    else:
-        raise TypeError("upload must be CSV bytes, text, or a file-like object")
+        frame = pd.read_csv(source, nrows=MAX_UPLOAD_ROWS + 1)
+    except pd.errors.EmptyDataError as error:
+        raise ValueError("CSV contains no observations") from error
 
     if frame.empty:
         raise ValueError("CSV contains no observations")
@@ -136,7 +171,7 @@ def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
         raise ValueError("Rainfall values cannot be negative")
 
     if time_column is not None:
-        dates = pd.to_datetime(frame[time_column], errors="coerce", format="mixed")
+        dates = pd.to_datetime(frame[time_column], errors="coerce", format="mixed", utc=True)
         if dates.isna().any():
             raise ValueError("Timestamp values must all be valid dates or times")
         if dates.duplicated().any():
@@ -145,7 +180,7 @@ def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
         dates = dates.iloc[order].reset_index(drop=True)
         rain = rain.iloc[order].reset_index(drop=True)
     else:
-        dates = pd.Series(pd.date_range("2024-01-01", periods=len(frame), freq="h"))
+        dates = pd.Series(pd.date_range("2024-01-01", periods=len(frame), freq="h", tz="UTC"))
 
     if len(rain) < 5:
         raise ValueError("CSV needs at least 5 hourly observations")
@@ -154,7 +189,6 @@ def load_rainfall_csv(upload: bytes | bytearray | str | Any) -> pd.DataFrame:
         "precipitation_mm": rain.astype(float),
         "source": "uploaded-csv",
     })
-
 
 def train_heavy_rain_model(df: pd.DataFrame, threshold_mm: float = 10.0) -> dict[str, Any]:
     """Train a next-observation classifier and report chronological holdout accuracy.
