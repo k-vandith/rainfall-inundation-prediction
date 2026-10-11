@@ -152,12 +152,6 @@ def main() -> None:
         st.error(f"Unable to build this scenario: {exc}")
         st.stop()
 
-    alert_colors = {
-        "normal": "#34d399",
-        "watch": "#fbbf24",
-        "warning": "#fb923c",
-        "severe": "#fb7185",
-    }
     scenario_color = "#fbbf24"
     st.markdown(
         f"""
