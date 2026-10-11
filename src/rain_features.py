@@ -249,7 +249,7 @@ def train_heavy_rain_model(df: pd.DataFrame, threshold_mm: float = 10.0) -> dict
             if str(value).strip()
         }
     non_observation_sources = {"synthetic", "synthetic-fallback", "open-meteo"}
-    if sources and sources.issubset(non_observation_sources):
+    if sources and (sources & non_observation_sources):
         return {
             "backend": "rules",
             "model": None,
