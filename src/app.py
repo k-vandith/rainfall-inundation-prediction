@@ -105,7 +105,11 @@ def main() -> None:
             ).tail(window_hours).reset_index(drop=True)
         source_label = str(df["source"].iloc[0])
         if source_label == "synthetic-fallback":
-            st.warning("Open-Meteo could not be reached. This view is using synthetic fallback data, not a live forecast.")
+            st.error(
+                "The live forecast is unavailable. Generated fallback values are not shown as a forecast. "
+                "Retry the request or explicitly choose Synthetic demo."
+            )
+            st.stop()
     elif source_mode == "CSV upload":
         uploaded = st.file_uploader(
             "Upload rainfall CSV",
